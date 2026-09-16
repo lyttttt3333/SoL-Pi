@@ -15,7 +15,6 @@ const homeRoot = await mkdtemp(join(homedir(), 'pr35-home-'));
 const results = [];
 const tools = new Map();
 createActionFusionExtension({ bashOptions: { shellPath: process.env.TEST_BASH } })({ registerTool(tool) { tools.set(tool.name, tool); } });
-const quote = text => `'${text.replaceAll("'", "'\\''")}'`;
 function shellPath(path, prefix) {
   assert.match(path, /^[a-z]:\\/i);
   return `/${prefix}${path[0].toLowerCase()}/${path.slice(3).replaceAll('\\', '/')}`;
@@ -49,7 +48,9 @@ for (const toolName of ['write', 'edit']) {
     const expectSkip = variant === 'baseline' && affected;
     if (toolName === 'edit') await writeFile(target, 'before\n');
     const js = `const fs=require("fs");const text=fs.readFileSync(${JSON.stringify(target)},"utf8");if(text!=="after\\n")process.exit(31);fs.writeFileSync(${JSON.stringify(marker)},text);console.log("PR35_FOLLOW_UP_OK");`;
-    const input = { path: inputPath, ...(toolName === 'write' ? { content: 'after\n' } : { edits: [{ oldText: 'before', newText: 'after' }] }), then_run: { command: `node -e ${quote(js)}`, timeout: 20 } };
+    // Keep native paths out of shell argument quoting on Windows.
+    await writeFile(join(cwd, 'pr35-check.cjs'), js);
+    const input = { path: inputPath, ...(toolName === 'write' ? { content: 'after\n' } : { edits: [{ oldText: 'before', newText: 'after' }] }), then_run: { command: 'node pr35-check.cjs', timeout: 20 } };
     const ctx = { cwd, mode: 'json', hasUI: false, ui: {}, sessionManager: { getSessionId: () => id, getSessionFile: () => undefined } };
     let output = '', error;
     try {
